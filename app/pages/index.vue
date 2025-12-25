@@ -1,111 +1,126 @@
 <template>
-    <main class="container">
+    <main class="viewer">
         <div class="title-row">
-            <h1>Редактор сценарію</h1>
-            <AppFontSizeControl />
-            <AppThemeToggle />
+            <h1 class="title">{{ data?.title || 'Перегляд пʼєси' }}</h1>
+            <button @click="toPlay" class="link">Редагувати</button>
         </div>
 
-        <label for="title" class="label">Назва пʼєси (необовʼязково)</label>
-        <input id="title" v-model="title" class="input" placeholder="Сон літньої ночі"/>
+        <header class="topbar">
+            <div v-if="data?.characters?.length" class="characters">
+                <button
+                        v-for="ch in data.characters"
+                        :key="ch"
+                        class="chip"
+                        :class="{ active: active === ch }"
+                        :style="active === ch ? { backgroundColor: getColor(ch) } : { opacity: 0.5 }"
+                        @click="toggleActive(ch)"
+                >
+                    {{ ch }}
+                </button>
+            </div>
+        </header>
 
-        <label for="script" class="label">Текст сценарію</label>
-        <textarea
-                id="script"
-                v-model="script"
-                class="textarea"
-                rows="18"
-                placeholder="Вставте ваш сценарій тут..."
-        />
+        <section v-if="data" class="content">
+            <template v-for="(b, i) in data.blocks" :key="i">
+                <div
+                        v-if="b.type === 'stage'"
+                        class="block stage"
+                >
+                    <span class="stage-text">({{ b.text }})</span>
+                </div>
+                <div
+                        v-else-if="b.type === 'quote'"
+                        class="block quote"
+                >
+                    <blockquote class="quote-text">{{ b.text }}</blockquote>
+                </div>
+                <div
+                        v-else
+                        class="block dialogue"
+                        :class="{ dimmed: isDimmed(b.character) }"
+                >
+                    <div class="speaker">
+                        <span class="name" :style="{ color: getColor(b.character) }">{{ b.character }}</span>
+                        <span v-if="b.aside" class="aside">({{ b.aside }})</span>
+                    </div>
+                    <div class="line">{{ b.text }}</div>
+                </div>
+            </template>
+        </section>
 
-        <div class="actions">
-            <button class="btn" @click="onParse">До роботи!</button>
-        </div>
+        <section v-else class="empty">
+            <p>Немає даних для показу. Спочатку
+                <NuxtLink to="/">вставте текст сценарію</NuxtLink>
+                .
+            </p>
+        </section>
     </main>
 </template>
 
 <script setup>
-import {parseScript} from '@/utils/parseScript'
-
-const router = useRouter()
 const loading = useState('loading')
-const parsedState = useState('parsedPlay', () => null)
-const cookieParsedPlay = useCookie('parsedPlay')
-// Store raw inputs to cookies so we can restore on "Редагувати"
-const cookieRawScript = useCookie('rawScript')
-const cookieRawTitle = useCookie('rawTitle')
+const state = useState('parsedPlay', () => null)
+const data = ref(state.value)
+const active = ref(null)
 
-const script = ref('')
-const title = ref('')
+// Deterministic color palette for speakers
+const palette = [
+    '#e11d48',
+    '#7c3aed',
+    '#0050ff',
+    '#16a34a',
+    '#d97706',
+    '#0ea5e9',
+    '#f59e0b',
+    '#ef4444',
+]
 
-onMounted(async () => {
-    // Restore raw inputs from localStorage first (handles long texts beyond cookie limits)
-    try {
-        const lsScript = localStorage.getItem('rawScript')
-        const lsTitle = localStorage.getItem('rawTitle')
-        if (lsScript !== null) script.value = lsScript
-        if (lsTitle !== null) title.value = lsTitle
-    } catch {}
+const colorMap = ref({})
 
-    // Fallback to cookies if localStorage is empty/unavailable
-    try {
-        if (!script.value && cookieRawScript.value) script.value = cookieRawScript.value
-        if (!title.value && cookieRawTitle.value) title.value = cookieRawTitle.value
-    } catch {}
-
-    // If still empty, try to preload from public/content.js
-    if (!script.value) {
-        try {
-            const res = await fetch('/content.js', { cache: 'no-store' })
-            if (res.ok) {
-                const js = await res.text()
-                const titleMatch = js.match(/const\s+title\s*=\s*['"]([\s\S]*?)['"]\s*;/)
-                const contentMatch = js.match(/const\s+content\s*=\s*`([\s\S]*?)`\s*;/)
-                const fileTitle = titleMatch?.[1]?.trim() || ''
-                const fileContent = contentMatch?.[1]?.trim() || ''
-                if (fileContent) {
-                    script.value = fileContent
-                    if (!title.value && fileTitle) title.value = fileTitle
-
-                    // persist for future sessions and to prioritize cookies over file next time
-                    try { cookieRawScript.value = script.value } catch {}
-                    try { cookieRawTitle.value = title.value } catch {}
-                    try { localStorage.setItem('rawScript', script.value) } catch {}
-                    try { localStorage.setItem('rawTitle', title.value) } catch {}
-                }
-            }
-        } catch {}
+function buildColorMap() {
+    const chars = data.value?.characters || []
+    const next = {}
+    let idx = 0
+    for (const name of chars) {
+        // Preserve previously chosen color if exists
+        next[name] = colorMap.value[name] || palette[idx % palette.length]
+        idx++
     }
+    colorMap.value = next
+}
 
-    router.afterEach(() => loading.value = false )
+onMounted(() => {
+    if(!data.value) {
+        try {
+            const raw = localStorage.getItem('parsedPlay')
+            if(raw) {
+                data.value = JSON.parse(raw)
+                state.value = data.value
+            }
+        } catch {
+        }
+    }
+    buildColorMap()
 })
 
-function onParse() {
-    loading.value = true
+watch(() => data.value?.characters, () => {
+    buildColorMap()
+}, { immediate: false })
 
-    try {
-        const parsed = parseScript(script.value, title.value || 'Назва пʼєси')
-        if(title.value) parsed.title = title.value
-        parsedState.value = parsed
+function getColor(name) {
+    return colorMap.value[name] || '#3b82f6'
+}
 
-        // save parsed object
-        try { cookieParsedPlay.value = parsed } catch {}
+function toggleActive(ch) {
+    active.value = active.value === ch ? null : ch
+}
 
-        // also save raw inputs for future editing
-        try { cookieRawScript.value = script.value } catch {}
-        try { cookieRawTitle.value = title.value } catch {}
-        try { localStorage.setItem('rawScript', script.value) } catch {}
-        try { localStorage.setItem('rawTitle', title.value) } catch {}
+function isDimmed(character) {
+    return active.value !== null && character !== active.value
+}
 
-        try { localStorage.setItem('parsedPlay', JSON.stringify(parsed)) } catch {}
-
-        // navigate
-        router.push('/play')
-    } catch(e) {
-        console.error(e)
-        alert('Сталася помилка під час розбору тексту')
-        loading.value = false
-    }
+function toPlay() {
+    window.location.href = '/play'
 }
 </script>
 
@@ -327,45 +342,110 @@ function onParse() {
         flex-direction: column;
     }
 
-    .label {
-        display: block;
-        margin-top: 12px;
-        margin-bottom: 6px;
-        font-size: 0.875rem;
-        color: rgb(var(--color-gray-rgb) / 0.9);
+    .viewer {
+        max-width: 900px;
+        margin: 0 auto;
+        padding-bottom: 48px;
     }
 
-    input,
-    textarea {
-        padding: 10px 12px;
-        border: 1px solid rgb(var(--color-gray-rgb) / 0.3);
-        border-radius: 8px;
-        font-size: 1rem;
-        color: var(--color-text);
+    .topbar {
+        position: sticky;
+        top: 0;
+        border-bottom: 1px solid rgba(var(--color-gray-rgb) / 0.5);
+        background-color: var(--bg-main);
+        padding: 6px 0;
+        z-index: 10;
     }
 
-    input::placeholder,
-    textarea::placeholder {
-        color: rgb(var(--color-gray-rgb) / 0.5);
+    .title {
+        font-size: 1.375rem;
+        margin: 0;
     }
 
-    .actions {
-        margin-top: 16px;
+    .link {
+        color: #3b82f6;
+        text-decoration: none;
+    }
+
+    .link:hover {
+        text-decoration: underline;
+    }
+
+    .characters {
         display: flex;
-        gap: 12px;
+        flex-wrap: wrap;
+        gap: 8px;
     }
 
-    .btn {
-        margin-left: auto;
-        background: #3b82f6;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 10px 16px;
+    .chip {
+        border: 1px solid rgba(var(--color-gray-rgb) / 0.5);
+        background: var(--bg-main);
+        color: var(--color-text);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 0.875rem;
         cursor: pointer;
     }
 
-    .btn:hover {
-        background: #2563eb;
+    .chip:hover {
+        border-color: red;
+    }
+
+    .content {
+        padding: 16px;
+    }
+
+    .block {
+        margin: 10px 0 14px;
+    }
+
+    .dialogue .speaker {
+        font-size: 0.8rem;
+        font-weight: 700;
+    }
+
+    .dialogue .name {
+        margin-right: 6px;
+    }
+
+    .dialogue .aside {
+        color: #666;
+        font-weight: 400;
+    }
+
+    .dialogue .line {
+        margin-top: 4px;
+    }
+
+    .stage {
+        text-align: center;
+        color: var(--color-gray);
+    }
+
+    .stage-text {
+        font-style: italic;
+    }
+
+    .quote {
+        margin-left: 16px;
+        margin-right: 16px;
+    }
+
+    .quote-text {
+        margin: 0;
+        padding: 8px 12px;
+        border-left: 4px solid rgba(var(--color-gray-rgb) / 0.3);
+        background: rgba(var(--color-gray-rgb) / 0.1);
+        white-space: pre-wrap;
+    }
+
+    .dimmed {
+        opacity: 0.2;
+    }
+
+    .empty {
+        padding: 24px;
+        text-align: center;
+        color: #666;
     }
 </style>

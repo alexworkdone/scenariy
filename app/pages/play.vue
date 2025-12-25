@@ -1,230 +1,154 @@
 <template>
-    <main class="viewer">
+    <main class="container">
         <div class="title-row">
-            <h1 class="title">{{ data?.title || 'Перегляд пʼєси' }}</h1>
-            <NuxtLink to="/" class="link">Редагувати</NuxtLink>
+            <h1>Редактор сценарію</h1>
+            <AppFontSizeControl />
+            <AppThemeToggle />
         </div>
 
-        <header class="topbar">
-            <div v-if="data?.characters?.length" class="characters">
-                <button
-                        v-for="ch in data.characters"
-                        :key="ch"
-                        class="chip"
-                        :class="{ active: active === ch }"
-                        :style="active === ch ? { backgroundColor: getColor(ch) } : { opacity: 0.5 }"
-                        @click="toggleActive(ch)"
-                >
-                    {{ ch }}
-                </button>
-            </div>
-        </header>
+        <label for="title" class="label">Назва пʼєси (необовʼязково)</label>
+        <input id="title" v-model="title" class="input" placeholder="Сон літньої ночі"/>
 
-        <section v-if="data" class="content">
-            <template v-for="(b, i) in data.blocks" :key="i">
-                <div
-                        v-if="b.type === 'stage'"
-                        class="block stage"
-                >
-                    <span class="stage-text">({{ b.text }})</span>
-                </div>
-                <div
-                        v-else-if="b.type === 'quote'"
-                        class="block quote"
-                >
-                    <blockquote class="quote-text">{{ b.text }}</blockquote>
-                </div>
-                <div
-                        v-else
-                        class="block dialogue"
-                        :class="{ dimmed: isDimmed(b.character) }"
-                >
-                    <div class="speaker">
-                        <span class="name" :style="{ color: getColor(b.character) }">{{ b.character }}</span>
-                        <span v-if="b.aside" class="aside">({{ b.aside }})</span>
-                    </div>
-                    <div class="line">{{ b.text }}</div>
-                </div>
-            </template>
-        </section>
+        <label for="script" class="label">Текст сценарію</label>
+        <textarea
+                id="script"
+                v-model="script"
+                class="textarea"
+                rows="18"
+                placeholder="Вставте ваш сценарій тут..."
+        />
 
-        <section v-else class="empty">
-            <p>Немає даних для показу. Спочатку
-                <NuxtLink to="/">вставте текст сценарію</NuxtLink>
-                .
-            </p>
-        </section>
+        <div class="actions">
+            <button class="btn" @click="onParse">До роботи!</button>
+        </div>
     </main>
 </template>
 
 <script setup>
+import {parseScript} from '@/utils/parseScript'
+
+const router = useRouter()
 const loading = useState('loading')
-const state = useState('parsedPlay', () => null)
-const data = ref(state.value)
-const active = ref(null)
+const parsedState = useState('parsedPlay', () => null)
+const cookieParsedPlay = useCookie('parsedPlay')
+// Store raw inputs to cookies so we can restore on "Редагувати"
+const cookieRawScript = useCookie('rawScript')
+const cookieRawTitle = useCookie('rawTitle')
 
-// Deterministic color palette for speakers
-const palette = [
-    '#e11d48',
-    '#7c3aed',
-    '#0050ff',
-    '#16a34a',
-    '#d97706',
-    '#0ea5e9',
-    '#f59e0b',
-    '#ef4444',
-]
+const script = ref('')
+const title = ref('')
 
-const colorMap = ref({})
+onMounted(async () => {
+    // Restore raw inputs from localStorage first (handles long texts beyond cookie limits)
+    try {
+        const lsScript = localStorage.getItem('rawScript')
+        const lsTitle = localStorage.getItem('rawTitle')
+        if (lsScript !== null) script.value = lsScript
+        if (lsTitle !== null) title.value = lsTitle
+    } catch {}
 
-function buildColorMap() {
-    const chars = data.value?.characters || []
-    const next = {}
-    let idx = 0
-    for (const name of chars) {
-        // Preserve previously chosen color if exists
-        next[name] = colorMap.value[name] || palette[idx % palette.length]
-        idx++
-    }
-    colorMap.value = next
-}
+    // Fallback to cookies if localStorage is empty/unavailable
+    try {
+        if (!script.value && cookieRawScript.value) script.value = cookieRawScript.value
+        if (!title.value && cookieRawTitle.value) title.value = cookieRawTitle.value
+    } catch {}
 
-onMounted(() => {
-    if(!data.value) {
+    // If still empty, try to preload from public/content.js
+    if (!script.value) {
         try {
-            const raw = localStorage.getItem('parsedPlay')
-            if(raw) {
-                data.value = JSON.parse(raw)
-                state.value = data.value
+            const res = await fetch('/content.js', { cache: 'no-store' })
+            if (res.ok) {
+                const js = await res.text()
+                const titleMatch = js.match(/const\s+title\s*=\s*['"]([\s\S]*?)['"]\s*;/)
+                const contentMatch = js.match(/const\s+content\s*=\s*`([\s\S]*?)`\s*;/)
+                const fileTitle = titleMatch?.[1]?.trim() || ''
+                const fileContent = contentMatch?.[1]?.trim() || ''
+                if (fileContent) {
+                    script.value = fileContent
+                    if (!title.value && fileTitle) title.value = fileTitle
+
+                    // persist for future sessions and to prioritize cookies over file next time
+                    try { cookieRawScript.value = script.value } catch {}
+                    try { cookieRawTitle.value = title.value } catch {}
+                    try { localStorage.setItem('rawScript', script.value) } catch {}
+                    try { localStorage.setItem('rawTitle', title.value) } catch {}
+                }
             }
-        } catch {
-        }
+        } catch {}
     }
-    buildColorMap()
+
+    router.afterEach(() => loading.value = false )
 })
 
-watch(() => data.value?.characters, () => {
-    buildColorMap()
-}, { immediate: false })
+function onParse() {
+    loading.value = true
 
-function getColor(name) {
-    return colorMap.value[name] || '#3b82f6'
-}
+    try {
+        const parsed = parseScript(script.value, title.value || 'Назва пʼєси')
+        if(title.value) parsed.title = title.value
+        parsedState.value = parsed
 
-function toggleActive(ch) {
-    active.value = active.value === ch ? null : ch
-}
+        // save parsed object
+        try { cookieParsedPlay.value = parsed } catch {}
 
-function isDimmed(character) {
-    return active.value !== null && character !== active.value
+        // also save raw inputs for future editing
+        try { cookieRawScript.value = script.value } catch {}
+        try { cookieRawTitle.value = title.value } catch {}
+        try { localStorage.setItem('rawScript', script.value) } catch {}
+        try { localStorage.setItem('rawTitle', title.value) } catch {}
+
+        try { localStorage.setItem('parsedPlay', JSON.stringify(parsed)) } catch {}
+
+        // navigate
+        window.location.href = '/'
+    } catch(e) {
+        console.error(e)
+        alert('Сталася помилка під час розбору тексту')
+        loading.value = false
+    }
 }
 </script>
 
 <style>
-    .viewer {
-        max-width: 900px;
-        margin: 0 auto;
-        padding-bottom: 48px;
-    }
-
-    .topbar {
-        position: sticky;
-        top: 0;
-        border-bottom: 1px solid rgba(var(--color-gray-rgb) / 0.5);
-        background-color: var(--bg-main);
-        padding: 6px 0;
-        z-index: 10;
-    }
-
-    .title {
-        font-size: 1.375rem;
-        margin: 0;
-    }
-
-    .link {
-        color: #3b82f6;
-        text-decoration: none;
-    }
-
-    .link:hover {
-        text-decoration: underline;
-    }
-
-    .characters {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
-    .chip {
-        border: 1px solid rgba(var(--color-gray-rgb) / 0.5);
-        background: var(--bg-main);
-        color: var(--color-text);
-        border-radius: 999px;
-        padding: 2px 8px;
+    .label {
+        display: block;
+        margin-top: 12px;
+        margin-bottom: 6px;
         font-size: 0.875rem;
+        color: rgb(var(--color-gray-rgb) / 0.9);
+    }
+
+    input,
+    textarea {
+        padding: 10px 12px;
+        border: 1px solid rgb(var(--color-gray-rgb) / 0.3);
+        border-radius: 8px;
+        font-size: 1rem;
+        color: var(--color-text);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+        color: rgb(var(--color-gray-rgb) / 0.5);
+    }
+
+    .actions {
+        margin-top: 16px;
+        display: flex;
+        gap: 12px;
+    }
+
+    .btn {
+        margin-left: auto;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 16px;
         cursor: pointer;
     }
 
-    .chip:hover {
-        border-color: red;
-    }
-
-    .content {
-        padding: 16px;
-    }
-
-    .block {
-        margin: 10px 0 14px;
-    }
-
-    .dialogue .speaker {
-        font-size: 0.8rem;
-        font-weight: 700;
-    }
-
-    .dialogue .name {
-        margin-right: 6px;
-    }
-
-    .dialogue .aside {
-        color: #666;
-        font-weight: 400;
-    }
-
-    .dialogue .line {
-        margin-top: 4px;
-    }
-
-    .stage {
-        text-align: center;
-        color: var(--color-gray);
-    }
-
-    .stage-text {
-        font-style: italic;
-    }
-
-    .quote {
-        margin-left: 16px;
-        margin-right: 16px;
-    }
-
-    .quote-text {
-        margin: 0;
-        padding: 8px 12px;
-        border-left: 4px solid rgba(var(--color-gray-rgb) / 0.3);
-        background: rgba(var(--color-gray-rgb) / 0.1);
-        white-space: pre-wrap;
-    }
-
-    .dimmed {
-        opacity: 0.2;
-    }
-
-    .empty {
-        padding: 24px;
-        text-align: center;
-        color: #666;
+    .btn:hover {
+        background: #2563eb;
     }
 </style>
