@@ -46,7 +46,7 @@ const decrease = () => {
 .fs-btn {
   padding: 6px 10px;
   border-radius: 6px;
-  border: 1px solid var(--color-border, #e2e2e2);
+  border: 1px solid currentColor;
   background: transparent;
   color: var(--color-gray);
   cursor: pointer;
@@ -54,7 +54,11 @@ const decrease = () => {
 }
 
 .fs-btn:hover:not(:disabled) {
-  background: var(--color-hover, rgba(0,0,0,0.05));
+  background: rgba(0,0,0,0.05);
+}
+
+:root.dark .fs-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
 }
 
 .fs-btn:disabled {

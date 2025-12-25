@@ -1,75 +1,40 @@
-# Nuxt Minimal Starter
+# Scenariy — редактор і програвач сценарію (Nuxt 4)
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Короткий веб‑додаток на Nuxt, що дозволяє вставити текст пʼєси/сценарію, розібрати його на ролі та репліки і переглядати у зручному режимі відтворення. Дані зберігаються локально в браузері.
 
-## Setup
+## Можливості
+- Поле для назви пʼєси та велике текстове поле для сценарію.
+- Розбір (парсинг) тексту у структуровану форму: дії/сцени/ролі/репліки (`app/utils/parseScript.ts`).
+- Перегляд розібраного сценарію на сторінці програвача (`/play`).
+- Перемикач теми (світла/темна) і контроль розміру шрифту.
+- Автозбереження введених даних у cookies та localStorage, щоб не втрачати прогрес.
+- Попереднє завантаження прикладу з `public/content.js` (якщо поле порожнє при старті).
 
-Make sure to install dependencies:
-
+## Як запустити локально
 ```bash
-# npm
+# Встановити залежності
 npm install
 
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
-```
-
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
+# Запустити дев‑сервер (http://localhost:3000)
 npm run dev
 
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
-```
-
-## Production
-
-Build the application for production:
-
-```bash
-# npm
+# Зібрати продакшн
 npm run build
 
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
+# Переглянути продакшн‑збірку локально
 npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
 ```
 
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+## Структура (коротко)
+- `app/pages/index.vue` — редактор: введення назви та тексту, кнопка «До роботи!», збереження у cookies/LS.
+- `app/pages/play.vue` — перегляд/«програвач» розібраного сценарію.
+- `app/utils/parseScript.ts` — логіка парсингу тексту сценарію.
+- `app/components/AppThemeToggle.vue`, `AppFontSizeControl.vue` — тема та масштаб шрифту.
+- `public/content.js` — приклад вмісту, який може автопідтягуватись при старті.
+
+## Як користуватись
+1. Вставте текст сценарію на головній сторінці і (за бажання) вкажіть назву.
+2. Натисніть «До роботи!» — відбудеться розбір та перехід до сторінки перегляду.
+3. Переглядайте репліки у зручному форматі; повертайтесь до редагування за потреби.
+
+Примітка: введені дані та розібраний сценарій зберігаються у cookies/localStorage вашого браузера. Для повного очищення — видаліть відповідні дані у налаштуваннях браузера.

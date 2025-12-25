@@ -10,7 +10,12 @@ export interface Dialogue {
   text: string; // spoken text (may include sentences and punctuation)
 }
 
-export type Block = StageDirection | Dialogue;
+export interface QuoteBlock {
+  type: 'quote';
+  text: string; // quoted text inside double quotes, may span multiple lines
+}
+
+export type Block = StageDirection | Dialogue | QuoteBlock;
 
 export interface ParsedPlay {
   title: string;
@@ -48,7 +53,7 @@ export function parseScript(input: string, titleFallback = 'Назва пʼєс�
   let title = titleFallback;
   if (lines.length) {
     const first = lines[0];
-    const isProbablyTitle = !/^\(.*\)$/.test(first) && !first.includes(':');
+    const isProbablyTitle = !/^\(.*\)$/.test(first) && !first.includes(':') && !first.startsWith('"');
     if (isProbablyTitle && first.length < 120) {
       title = first;
       lines.shift();
@@ -59,7 +64,65 @@ export function parseScript(input: string, titleFallback = 'Назва пʼєс�
   // but retain existing line concatenation as simple continuous parsing.
   const stageLineRe = /^\((.*)\)$/; // whole line in parentheses
 
+  // Within quote blocks, lines may be wrapped in round brackets. Strip a single outer pair.
+  const stripOuterParensOnce = (s: string): string => {
+    let out = s.trim();
+    if (out.startsWith('(') && out.endsWith(')') && out.length >= 2) {
+      out = out.slice(1, -1).trim();
+    } else {
+      if (out.startsWith('(')) out = out.slice(1).trim();
+      if (out.endsWith(')')) out = out.slice(0, -1).trim();
+    }
+    return out;
+  };
+
+  let inQuote = false;
+  let quoteParts: string[] = [];
+
   for (const line of lines) {
+    // Handle quote blocks enclosed in double quotes, may span multiple lines
+    if (!inQuote && line.startsWith('"')) {
+      // Begin a quote block. Remove the opening quote and look for a closing one anywhere in the line.
+      const rest = line.slice(1);
+      const closePos = rest.indexOf('"');
+      if (closePos >= 0) {
+        // Quote starts and ends on the same line
+        const between = stripOuterParensOnce(rest.slice(0, closePos));
+        blocks.push({ type: 'quote', text: between });
+        const trailing = rest.slice(closePos + 1).trim();
+        // If trailing contains only closing parentheses, ignore; otherwise fall through to normal parsing by continuing to next line
+        // (we just continue, remaining trailing text is ignored for simplicity as common cases are only ")")
+        inQuote = false;
+        quoteParts = [];
+        continue;
+      } else {
+        inQuote = true;
+        quoteParts = [stripOuterParensOnce(rest)];
+        continue;
+      }
+    } else if (inQuote) {
+      // We are inside a multi-line quote. Look for a closing quote anywhere in this line.
+      const closePos = line.indexOf('"');
+      if (closePos >= 0) {
+        const before = stripOuterParensOnce(line.slice(0, closePos));
+        quoteParts.push(before);
+        const text = quoteParts.join('\n');
+        blocks.push({ type: 'quote', text });
+        inQuote = false;
+        quoteParts = [];
+        // Ignore any trailing content after the closing quote if it's only ")" or whitespace
+        const trailing = line.slice(closePos + 1).trim();
+        if (trailing && trailing.replace(/\)+/g, '') !== '') {
+          // Non-parenthesis trailing content exists; treat as a freetext stage line
+          blocks.push({ type: 'stage', text: trailing });
+        }
+        continue;
+      } else {
+        quoteParts.push(stripOuterParensOnce(line));
+        continue;
+      }
+    }
+
     const stageMatch = line.match(stageLineRe);
     if (stageMatch) {
       blocks.push({ type: 'stage', text: stageMatch[1].trim() });
@@ -104,7 +167,7 @@ export function parseScript(input: string, titleFallback = 'Назва пʼєс�
 
     if (matched) continue;
 
-    // If line contains stage direction inside but not entire line, split it naïvely
+    // If line contains stage direction inside but not entire line, split it naïвно
     // Example: Наталка(цілує її): Ти така...
     const inlineStage = line.match(new RegExp(`^${nameRe.source}\\s*\\(([^)]*)\\)\\s*:?\\s*(.*)$`));
     if (inlineStage) {
@@ -118,6 +181,12 @@ export function parseScript(input: string, titleFallback = 'Назва пʼєс�
 
     // Otherwise, it's a free text line; treat as stage direction paragraph
     blocks.push({ type: 'stage', text: line });
+  }
+
+  // If input ended while still in quote, flush as quote
+  if (inQuote) {
+    const text = quoteParts.join('\n');
+    blocks.push({ type: 'quote', text });
   }
 
   const characters = Array.from(charactersSet);
