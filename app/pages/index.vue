@@ -2,7 +2,7 @@
     <main class="viewer">
         <div class="title-row">
             <h1 class="title">{{ data?.title || 'Перегляд пʼєси' }}</h1>
-            <button @click="toPlay" class="link">Редагувати</button>
+            <button @click="toPlay" class="link">Ред.</button>
         </div>
 
         <header class="topbar">
@@ -227,6 +227,7 @@ function toPlay() {
 
     h1 {
         margin: 0;
+        font-size: 28px;
     }
 
     button {
