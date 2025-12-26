@@ -41,9 +41,14 @@
                 >
                     <div class="speaker">
                         <span class="name" :style="{ color: getColor(b.character) }">{{ b.character }}</span>
-                        <span v-if="b.aside" class="aside">({{ b.aside }})</span>
                     </div>
-                    <div class="line">{{ b.text }}</div>
+                    <div class="line">
+                        <span v-if="b.aside" class="aside">({{ b.aside }})</span>
+                        <template v-for="(chunk, j) in tokenizeAsides(b.text)" :key="j">
+                            <span v-if="chunk.type === 'aside'" class="aside">({{ chunk.text }})</span>
+                            <template v-else>{{ chunk.text }}</template>
+                        </template>
+                    </div>
                 </div>
             </template>
         </section>
@@ -117,6 +122,36 @@ function toggleActive(ch) {
 
 function isDimmed(character) {
     return active.value !== null && character !== active.value
+}
+
+// Tokenize inline parenthetical asides inside a dialogue line
+// Returns array of chunks: [{ type: 'text'|'aside', text: string }]
+function tokenizeAsides(text) {
+    const chunks = []
+    if (!text) return chunks
+    let i = 0
+    while (i < text.length) {
+        const open = text.indexOf('(', i)
+        if (open === -1) {
+            chunks.push({ type: 'text', text: text.slice(i) })
+            break
+        }
+        const close = text.indexOf(')', open + 1)
+        if (close === -1) {
+            // No closing, treat the rest as text
+            chunks.push({ type: 'text', text: text.slice(i) })
+            break
+        }
+        // Push text before (
+        if (open > i) {
+            chunks.push({ type: 'text', text: text.slice(i, open) })
+        }
+        // Extract inside parentheses
+        const inside = text.slice(open + 1, close)
+        chunks.push({ type: 'aside', text: inside })
+        i = close + 1
+    }
+    return chunks
 }
 
 function toPlay() {
@@ -409,8 +444,11 @@ function toPlay() {
     }
 
     .dialogue .aside {
-        color: #666;
+        padding: 0 8px;
+        color: var(--color-text);
+        opacity: 0.5;
         font-weight: 400;
+        font-size: 0.9rem;
     }
 
     .dialogue .line {

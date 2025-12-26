@@ -130,33 +130,42 @@ export function parseScript(input: string, titleFallback = 'Назва пʼєс�
     }
 
     // Try to parse dialogue
-    // Patterns:
-    // 1) Name: Text
-    // 2) Name(aside) Text
-    // 3) Name (aside): Text
-    // We try to capture name + optional parenthetical immediately after name
+    // New rules: capture aside ONLY after the colon, e.g. "Name: (aside) Text"
+    // Supported patterns (order matters):
+    // 1) Name: (aside) Text
+    // 2) Name: Text
+    // 3) Name (anything before colon): Text  -> treat as plain dialogue without aside
     const dialoguePatterns: RegExp[] = [
+      // Aside right after colon
+      new RegExp(`^${nameRe.source}\\s*:\\s*\\(([^)]*)\\)\\s*(.*)$`),
+      // Plain dialogue after colon
       new RegExp(`^${nameRe.source}\\s*:\\s*(.*)$`),
-      new RegExp(`^${nameRe.source}\\s*\\(([^)]*)\\)\\s*(.*)$`),
-      new RegExp(`^${nameRe.source}\\s*\\(([^)]*)\\)\\s*:\\s*(.*)$`),
+      // Name with parentheses BEFORE colon — do NOT capture as aside
+      new RegExp(`^${nameRe.source}\\s*\\([^)]*\\)\\s*:\\s*(.*)$`),
     ];
 
     let matched = false;
-    for (const re of dialoguePatterns) {
+    for (let idx = 0; idx < dialoguePatterns.length; idx++) {
+      const re = dialoguePatterns[idx];
       const m = line.match(re);
       if (m) {
         matched = true;
-        const nameRaw = m[1];
+        let nameRaw = '';
         let aside = '';
         let text = '';
-        if (re === dialoguePatterns[0]) {
+        if (idx === 0) {
+          // Name: (aside) Text
+          nameRaw = m[1];
+          aside = m[2]?.trim() ?? '';
+          text = m[3]?.trim() ?? '';
+        } else if (idx === 1) {
+          // Name: Text
+          nameRaw = m[1];
           text = m[2]?.trim() ?? '';
-        } else if (re === dialoguePatterns[1]) {
-          aside = m[2]?.trim() ?? '';
-          text = m[3]?.trim() ?? '';
         } else {
-          aside = m[2]?.trim() ?? '';
-          text = m[3]?.trim() ?? '';
+          // Name (something): Text -> ignore the pre-colon parentheses for aside
+          nameRaw = m[1];
+          text = m[2]?.trim() ?? '';
         }
         const name = normalizeName(nameRaw);
         if (name) charactersSet.add(name);
@@ -167,17 +176,7 @@ export function parseScript(input: string, titleFallback = 'Назва пʼєс�
 
     if (matched) continue;
 
-    // If line contains stage direction inside but not entire line, split it naïвно
-    // Example: Наталка(цілує її): Ти така...
-    const inlineStage = line.match(new RegExp(`^${nameRe.source}\\s*\\(([^)]*)\\)\\s*:?\\s*(.*)$`));
-    if (inlineStage) {
-      const name = normalizeName(inlineStage[1]);
-      const aside = inlineStage[2]?.trim();
-      const text = inlineStage[3]?.trim() ?? '';
-      if (name) charactersSet.add(name);
-      blocks.push({ type: 'dialogue', character: name, aside: aside || undefined, text });
-      continue;
-    }
+    // Otherwise, it's a free text line; treat as stage direction paragraph
 
     // Otherwise, it's a free text line; treat as stage direction paragraph
     blocks.push({ type: 'stage', text: line });
