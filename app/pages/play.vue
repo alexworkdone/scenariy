@@ -110,6 +110,223 @@ function onParse() {
 </script>
 
 <style>
+    :root {
+        --bg-main: #ffffff;
+        --color-text: #000000;
+
+        --color-gray-rgb: 119 118 122;
+        --color-gray: rgb(var(--color-gray-rgb) / 1);
+
+        --padding-side: 24px;
+        --space: 16px;
+    }
+
+    html.dark {
+        --bg-main: #101419;
+        --color-text: #ffffff;
+    }
+
+    /* reset ------------------------------------------------- */
+    *,
+    *:before,
+    *:after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    * {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    main,
+    nav,
+    section,
+    footer,
+    header,
+    aside,
+    article,
+    dialog,
+    figcaption,
+    figure,
+    hgroup {
+        display: block;
+    }
+
+    ul,
+    dl {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    ol {
+        padding-left: 20px;
+        font-size: 0.8rem;
+    }
+
+    img {
+        max-width: 100%;
+        border: 0;
+        vertical-align: top;
+        user-select: none;
+    }
+
+    h1 {
+        margin: 0;
+    }
+
+    button {
+        margin: 0;
+        padding: 0;
+        background-color: transparent;
+        border: none;
+        cursor: pointer;
+    }
+
+    a:focus,
+    img:focus,
+    button:focus,
+    input:focus,
+    textarea:focus,
+    select:focus,
+    option:focus {
+        outline: none;
+    }
+
+    b,
+    strong {
+        font-weight: 600;
+    }
+
+    input,
+    textarea,
+    select,
+    button {
+        font-size: 1rem;
+        font-weight: 400;
+        outline: none;
+        border: none;
+        background-color: transparent;
+    }
+
+    select::-ms-expand {
+        display: none;
+    }
+
+    input::-webkit-input-placeholder {
+        color: var(--bg-main);
+    }
+
+    input::placeholder {
+        color: var(--color-gray);
+    }
+
+    input:focus::-webkit-input-placeholder {
+        color: transparent;
+    }
+
+    input[type='number'] {
+        -moz-appearance: textfield;
+    }
+
+    input[type='number']::-webkit-inner-spin-button,
+    input[type='number']::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    /* Firefox */
+    input[type='number'] {
+        -moz-appearance: textfield;
+    }
+    /* Chrome, Safari, Edge */
+    input[type='number']::-webkit-outer-spin-button,
+    input[type='number']::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    input[type='submit'],
+    input[type='text'],
+    input[type='email'],
+    input[type='search'],
+    textarea,
+    select {
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+    }
+
+    input[type='search']::-webkit-search-cancel-button {
+        -webkit-appearance: none;
+        appearance: none;
+    }
+
+    svg,
+    symbol,
+    image,
+    marker,
+    pattern {
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+    }
+
+    a,
+    a:hover,
+    a:focus,
+    a:active {
+        color: inherit;
+        text-decoration: none;
+        outline: none;
+        box-shadow: none;
+        background: transparent;
+    }
+
+    /* -------------------------------------------------  */
+    html {
+        font-size: 1rem;
+    }
+
+    body {
+        position: relative;
+        min-width: 320px;
+        background-color: var(--bg-main);
+        color: var(--color-text);
+        font-family: Arial, sans-serif;
+        font-size: 1rem;
+        font-weight: 400;
+        overflow-y: auto;
+        overflow-x: hidden;
+        line-height: 1.4;
+
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-size-adjust: 100%;
+        scroll-behavior: smooth;
+
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+    }
+
+    .title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .container {
+        max-width: 900px;
+        margin: 24px auto;
+        padding: 0 16px 32px;
+        display: flex;
+        flex-direction: column;
+    }
+
     .label {
         display: block;
         margin-top: 12px;
