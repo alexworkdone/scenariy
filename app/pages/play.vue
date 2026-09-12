@@ -1,5 +1,20 @@
 <template>
     <main class="container">
+        <section class="saved-scripts" aria-labelledby="saved-scripts-title">
+            <h2 id="saved-scripts-title">Додані сценарії:</h2>
+            <div class="script-list">
+                <button
+                    v-for="item in availableScripts"
+                    :key="item.id"
+                    type="button"
+                    class="script-button"
+                    :disabled="scriptLoading"
+                    @click="loadScript(item)"
+                >{{ item.title }}</button>
+            </div>
+            <p v-if="scriptMessage" class="script-message" role="status">{{ scriptMessage }}</p>
+        </section>
+
         <div class="title-row">
             <h1>Редактор сценарію</h1>
             <AppFontSizeControl />
@@ -26,6 +41,7 @@
 
 <script setup>
 import {parseScript} from '@/utils/parseScript'
+import { availableScripts } from '@/data/scripts'
 
 const router = useRouter()
 const loading = useState('loading')
@@ -37,6 +53,34 @@ const cookieRawTitle = useCookie('rawTitle')
 
 const script = ref('')
 const title = ref('')
+
+const scriptLoading = ref(false)
+const scriptMessage = ref('')
+
+async function loadScript(item, preload = false) {
+    scriptLoading.value = true
+    scriptMessage.value = ''
+    try {
+        const response = await fetch(`/scripts/${item.id}.txt`, { cache: 'no-store' })
+        if (!response.ok) throw new Error('Script loading failed')
+        const content = (await response.text()).trim()
+        if (!content) {
+            scriptMessage.value = `Текст сценарію «${item.title}» ще не додано.`
+            return
+        }
+        // Do not overwrite text entered while the initial request was pending.
+        if (preload && script.value) return
+        script.value = content
+        if (!preload || !title.value) title.value = [item.author, item.title].filter(Boolean).join(' ')
+        try { localStorage.setItem('rawScript', script.value) } catch {}
+        try { localStorage.setItem('rawTitle', title.value) } catch {}
+        try { cookieRawTitle.value = title.value } catch {}
+    } catch {
+        scriptMessage.value = 'Не вдалося завантажити сценарій. Спробуйте ще раз.'
+    } finally {
+        scriptLoading.value = false
+    }
+}
 
 onMounted(async () => {
     // Restore raw inputs from localStorage first (handles long texts beyond cookie limits)
@@ -53,28 +97,8 @@ onMounted(async () => {
         if (!title.value && cookieRawTitle.value) title.value = cookieRawTitle.value
     } catch {}
 
-    // If still empty, try to preload from public/content.js
-    if (!script.value) {
-        try {
-            const res = await fetch('/content.js', { cache: 'no-store' })
-            if (res.ok) {
-                const js = await res.text()
-                const titleMatch = js.match(/const\s+title\s*=\s*['"]([\s\S]*?)['"]\s*;/)
-                const contentMatch = js.match(/const\s+content\s*=\s*`([\s\S]*?)`\s*;/)
-                const fileTitle = titleMatch?.[1]?.trim() || ''
-                const fileContent = contentMatch?.[1]?.trim() || ''
-                if (fileContent) {
-                    script.value = fileContent
-                    if (!title.value && fileTitle) title.value = fileTitle
-
-                    // persist for future sessions and to prioritize cookies over file next time
-                    try { cookieRawScript.value = script.value } catch {}
-                    try { cookieRawTitle.value = title.value } catch {}
-                    try { localStorage.setItem('rawScript', script.value) } catch {}
-                    try { localStorage.setItem('rawTitle', title.value) } catch {}
-                }
-            }
-        } catch {}
+    if (!script.value && availableScripts.length) {
+        await loadScript(availableScripts[0], true)
     }
 
     router.afterEach(() => loading.value = false )
@@ -110,6 +134,47 @@ function onParse() {
 </script>
 
 <style>
+    .saved-scripts {
+        margin-bottom: 28px;
+    }
+
+    .saved-scripts h2 {
+        font-size: 1.25rem;
+        margin-bottom: 12px;
+    }
+
+    .script-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .script-button {
+        padding: 8px 12px;
+        border: 1px solid rgb(var(--color-gray-rgb) / 0.5);
+        border-radius: 8px;
+        color: var(--color-text);
+    }
+
+    .script-button:hover:not(:disabled) {
+        border-color: #3b82f6;
+    }
+
+    .script-button:focus-visible {
+        outline: 2px solid #3b82f6;
+        outline-offset: 2px;
+    }
+
+    .script-button:disabled {
+        opacity: 0.5;
+        cursor: wait;
+    }
+
+    .script-message {
+        margin-top: 10px;
+        color: var(--color-gray);
+    }
+
     :root {
         --bg-main: #ffffff;
         --color-text: #000000;
